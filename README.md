@@ -1,5 +1,5 @@
 # BashCrossrefSearch
-##by LeThorgrim
+## by LeThorgrim
 
 Simply a bash script to search articles in the CrossRef database
 >*https://www.crossref.org/*
