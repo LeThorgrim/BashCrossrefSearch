@@ -33,7 +33,7 @@ case "$choice" in
         url="https://api.crossref.org/works?query.author=$query" ;;
     3)  read -p "Enter the article's DOI: " query
         query=$(echo "$query" | sed 's/ /%20/g')  # Replace spaces with %20 (spaces are a problem if not)
-        url="https://api.crossref.org/works/$query" ;;
+        url="https://api.crossref.org/works/$query" ;; #be careful as doi as not real returns if you put a wrong one
     *)  echo "Invalid choice."; 
         exit 1 ;;
 esac
