@@ -1,6 +1,12 @@
 #!/bin/bash
 
-#verifications of dependancies
+# https://github.com/LeThorgrim/BashCrossrefSearch
+
+echo -e "\e[31mWelcome to the Crossref search tool!\e[0m"
+echo "By Thorgrim"
+echo -e "github.com/LeThorgrim/BashCrossrefSearch\n"
+
+#verifications of dependancies (basicly search in "PLUGS" what plugins we dont have) (needs to be put manually tho)
 PLUGS=("curl" "jq" "fzf")
 
 for cmd in "${PLUGS[@]}"; do
@@ -10,8 +16,8 @@ for cmd in "${PLUGS[@]}"; do
     fi
 done
 
-#search choice by the user
-echo "Choose how to search :"
+#search choice by the user + stylisation
+echo -e "\e[31mChoose how to search :\e[0m"
 echo "1/ By title"
 echo "2/ By autor"
 echo "3/ By DOI"
@@ -32,6 +38,7 @@ case "$choice" in
         exit 1 ;;
 esac
 #result
+echo -e "\e[31mWait for the result...\e[0m\n" #might take some time
 response=$(curl -s "$url")
 
 # if by DOI, simply have to get it (only one item will be returned by API)
@@ -39,8 +46,14 @@ if [ "$choice" -eq 3 ]; then
     selected_json="$response"
 # else we have to use fzf to select
 else
-    #we show only 30 first items (to long if +)
-    selected_json=$(echo "$response" | jq -r '.message.items[:30] | map({title: (.title[0] // "Titre inconnu"), doi: .DOI}) | .[] | "\(.title) (\(.doi))"' | fzf)
+    # check if result > 0
+    if [ "$(echo "$response" | jq '.message.items | length')" -eq 0 ]; then
+        echo "No results found."
+        exit 1
+    fi
+
+    #we show only 20 first items (it's the maximum that the API sends anyway)
+    selected_json=$(echo "$response" | jq -r '.message.items[:20] | map({title: (.title[0] // "Unknown Title"), doi: .DOI}) | .[] | "\(.title) (\(.doi))"' | fzf)
     #extract chosen item's DOI
     selected_doi=$(echo "$selected_json" | awk -F'(' '{print $NF}' | tr -d ')')
     #selected DOI get's us selected json
@@ -48,13 +61,28 @@ else
 fi
 
 #print of the json 
-echo "$selected_json" | jq -r '
+echo -e "\e[32mHere is the result:\e[0m"
+echo "$selected_json" | jq '{
+    "Title": (.message.title[0] // "not available"),
+    "Volume": (.message.volume // "not available"),
+    "URL": (.message.URL // "not available"),
+    "DOI": (.message.DOI // "not available"),
+    "Article-s Number": (.message.issue // "not available"),
+    "Article-s Pages": (.message.page // "not available"),
+    "Journal": (.message["container-title"][0] // "not available"),
+    "Publisher": (.message.publisher // "not available"),
+    "Author List": (if .message.author then 
+        [.message.author[] | {Surname: (.family // "not available"), Name: (.given // "not available")}] 
+    else 
+        "not available" 
+    end),
+    "Year of publication": (.message.issued["date-parts"][0][0] | tostring // "not available"),
 
-.message.items[0] // . |
-"Titre: \((.title | if . then .[0] else "Non disponible" end))
-DOI: \(.DOI // "Non disponible")
-URL: \(.URL // "Non disponible")
-Éditeur: \(.publisher // "Non disponible")
-Auteurs: \((.author // []) | map("\(.given // "Inconnu") \(.family // "Inconnu")") | join(", "))
-Année de publication: \((.issued."date-parts"[0][0] | if . then . else "Non disponible" end))"
-'
+    # BibTeX Key (last name of first author + year in lowercase) (im not sure if it is the way to do it)
+    # not sure why but didnt worked if : if else not in line
+    "BibTeX Key": (
+        (if .message.author then (.message.author[0].family // "unknown") else "unknown" end) +
+        (if .message.issued then (.message.issued["date-parts"][0][0] | tostring) else "yyyy" end) #tbf the else is useless because of tostring
+    ) | ascii_downcase
+    #there are many articles without author or year of publication, so a lot of bibtex key are unusable
+}'
